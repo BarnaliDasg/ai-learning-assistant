@@ -1,20 +1,27 @@
 
 from sentence_transformers import SentenceTransformer
 
-# Load a pre-trained embedding model
+# Load the embedding model once
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-sentences = [
-    "RAG helps AI answer questions using external documents.",
-    "Machine learning allows computers to learn from data.",
-    "AI can retrieve information from uploaded PDF files."
-]
 
-# Convert sentences into numerical vectors
-embeddings = model.encode(sentences)
+def generate_embeddings(texts):
+    """
+    Convert a list of text chunks into numerical vectors.
+    """
+    embeddings = model.encode(texts)
 
-print("Number of sentences:", len(sentences))
-print("Embedding shape:", embeddings.shape)
+    return embeddings
 
-print("\nFirst embedding:")
-print(embeddings[0])
+if __name__ == "__main__":
+
+    sample_chunks = [
+        "RAG retrieves information from external documents.",
+        "FastAPI is a Python framework for building APIs.",
+        "Embeddings represent text as numerical vectors."
+    ]
+
+    result = generate_embeddings(sample_chunks)
+
+    print("Number of chunks:", len(sample_chunks))
+    print("Embedding shape:", result.shape)
