@@ -15,10 +15,18 @@ collection = client.get_or_create_collection(
 )
 
 
-def store_chunks(chunks, filename):
+def store_chunks(chunks, filename, page_numbers):
 
     if not chunks:
         return 0
+
+    if len(chunks) != len(page_numbers):
+        raise ValueError("Each chunk must have a page number")
+
+    # Remove previously stored chunks from this PDF
+    collection.delete(
+        where={"source": filename}
+    )
 
     # Generate embeddings for all chunks
     embeddings = generate_embeddings(chunks)
@@ -29,15 +37,20 @@ def store_chunks(chunks, filename):
         for i in range(len(chunks))
     ]
 
-    # Store chunks, embeddings and metadata
+    # Store filename and page number as metadata
+    metadatas = [
+        {
+            "source": filename,
+            "page": page_numbers[i]
+        }
+        for i in range(len(chunks))
+    ]
+
     collection.upsert(
         ids=ids,
         documents=chunks,
         embeddings=embeddings.tolist(),
-        metadatas=[
-            {"source": filename}
-            for _ in chunks
-        ]
+        metadatas=metadatas
     )
 
     return len(chunks)
@@ -72,10 +85,13 @@ if __name__ == "__main__":
         "Embeddings represent text as numerical vectors."
     ]
 
+    sample_pages = [1, 1, 2]
+
     # Store sample chunks
     count = store_chunks(
         sample_chunks,
-        "test_document.pdf"
+        "test_document.pdf",
+        sample_pages
     )
 
     print("Stored chunks:", count)

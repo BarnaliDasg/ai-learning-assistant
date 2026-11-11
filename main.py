@@ -48,8 +48,7 @@ def health_check():
     }
 
 
-# General AI question endpoint
-
+# RAG question-answering endpoint
 @app.post("/ask")
 def ask_question(data: Question):
 
@@ -62,19 +61,28 @@ def ask_question(data: Question):
             detail="No documents found. Upload a PDF first."
         )
 
-    # Step 2: Prepare context for Gemini
+    # Step 2: Prepare context and collect source pages
     context_parts = []
-    sources = []
+    source_pages = {}
 
     for i, document in enumerate(results["documents"][0]):
-        source = results["metadatas"][0][i]["source"]
+
+        metadata = results["metadatas"][0][i]
+
+        source = metadata["source"]
+        page = metadata.get("page")
+
+        page_label = page if page is not None else "Unknown"
 
         context_parts.append(
-            f"Source {i + 1}: {source}\n{document}"
+            f"Source: {source}, Page: {page_label}\n{document}"
         )
 
-        if source not in sources:
-            sources.append(source)
+        if source not in source_pages:
+            source_pages[source] = set()
+
+        if page is not None:
+            source_pages[source].add(page)
 
     context = "\n\n".join(context_parts)
 
@@ -106,7 +114,16 @@ def ask_question(data: Question):
         contents=prompt
     )
 
-    # Step 5: Return answer and sources
+    # Step 5: Format source references
+    sources = []
+
+    for filename, pages in source_pages.items():
+        sources.append({
+            "file": filename,
+            "pages": sorted(pages)
+        })
+
+    # Step 6: Return answer and sources
     return {
         "question": data.question,
         "answer": response.text,
@@ -130,41 +147,52 @@ async def upload_pdf(file: UploadFile = File(...)):
         # Read PDF
         pdf = PdfReader(BytesIO(contents))
 
-        # Extract text from every page
-        extracted_text = ""
+        all_chunks = []
+        all_page_numbers = []
+        total_characters = 0
 
-        for page_number, page in enumerate(pdf.pages):
-            text = page.extract_text() or ""
+        # Extract and chunk each page separately
+        for page_number, page in enumerate(pdf.pages, start=1):
 
-            extracted_text += (
-                f"\nPage {page_number + 1}:\n{text}"
+            page_text = page.extract_text() or ""
+
+            total_characters += len(page_text)
+
+            if not page_text.strip():
+                continue
+
+            page_chunks = split_text(
+                page_text,
+                chunk_size=500,
+                overlap=50
             )
 
-        if not extracted_text.strip():
+            all_chunks.extend(page_chunks)
+
+            # Associate every chunk with its original page
+            all_page_numbers.extend(
+                [page_number] * len(page_chunks)
+            )
+
+        if not all_chunks:
             raise HTTPException(
                 status_code=400,
                 detail="No readable text found in this PDF"
             )
 
-        # Split extracted text into chunks
-        chunks = split_text(
-            extracted_text,
-            chunk_size=500,
-            overlap=50
-        )
-
-        # Store chunks and embeddings in ChromaDB
+        # Store chunks with page metadata
         stored_count = store_chunks(
-            chunks,
-            file.filename
+            all_chunks,
+            file.filename,
+            all_page_numbers
         )
 
         return {
             "message": "PDF uploaded and processed successfully",
             "filename": file.filename,
             "total_pages": len(pdf.pages),
-            "total_characters": len(extracted_text),
-            "total_chunks": len(chunks),
+            "total_characters": total_characters,
+            "total_chunks": len(all_chunks),
             "stored_chunks": stored_count
         }
 
@@ -194,9 +222,12 @@ def search_documents(data: Question):
 
     for i, document in enumerate(results["documents"][0]):
 
+        metadata = results["metadatas"][0][i]
+
         retrieved_documents.append({
             "content": document,
-            "source": results["metadatas"][0][i]["source"],
+            "source": metadata["source"],
+            "page": metadata.get("page"),
             "distance": results["distances"][0][i]
         })
 
