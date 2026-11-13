@@ -10,7 +10,7 @@ client = chromadb.PersistentClient(path="./chroma_db")
 
 # Create or retrieve a collection
 collection = client.get_or_create_collection(
-    name="learning_documents",
+    name="learning_documents_cosine",
     metadata={"hnsw:space": "cosine"}
 )
 
@@ -55,14 +55,41 @@ def store_chunks(chunks, filename, page_numbers):
 
     return len(chunks)
 
+def get_retrieval_count(query):
+    """
+    Choose the number of chunks based on the question type.
+    """
 
-def search_chunks(query, n_results=3):
+    query_lower = query.lower()
+
+    broad_keywords = [
+        "compare",
+        "comparison",
+        "all ",
+        "every ",
+        "list ",
+        "summarize",
+        "summary",
+        "overview",
+        "both "
+    ]
+
+    if any(keyword in query_lower for keyword in broad_keywords):
+        return 8
+
+    return 3
+
+def search_chunks(query, n_results=None):
 
     # Check whether the database contains records
     total_records = collection.count()
 
     if total_records == 0:
         return None
+
+    # Decide how many chunks to retrieve
+    if n_results is None:
+        n_results = get_retrieval_count(query)
 
     # Convert the user's question into an embedding
     query_embedding = generate_embeddings([query])
@@ -74,7 +101,6 @@ def search_chunks(query, n_results=3):
     )
 
     return results
-
 
 def list_documents():
     """
