@@ -76,6 +76,40 @@ def search_chunks(query, n_results=3):
     return results
 
 
+def list_documents():
+    """
+    Return a list of unique uploaded PDF filenames.
+    """
+    results = collection.get(include=["metadatas"])
+
+    filenames = {
+        metadata["source"]
+        for metadata in results["metadatas"]
+        if metadata and metadata.get("source")
+    }
+
+    return sorted(filenames)
+
+
+def delete_document(filename):
+    """
+    Delete all chunks belonging to a PDF.
+    """
+    results = collection.get(
+        where={"source": filename}
+    )
+
+    if not results["ids"]:
+        return 0
+
+    deleted_count = len(results["ids"])
+
+    collection.delete(
+        where={"source": filename}
+    )
+
+    return deleted_count
+
 if __name__ == "__main__":
 
     # Sample document chunks

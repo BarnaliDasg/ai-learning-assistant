@@ -9,7 +9,12 @@ from dotenv import load_dotenv
 from google import genai
 
 from chunking import split_text
-from vector_store import store_chunks, search_chunks
+from vector_store import (
+    store_chunks,
+    search_chunks,
+    list_documents,
+    delete_document
+)
 
 
 # Load environment variables
@@ -235,3 +240,35 @@ def search_documents(data: Question):
         "question": data.question,
         "results": retrieved_documents
     }
+
+
+# List uploaded documents
+@app.get("/documents")
+def get_documents():
+
+    documents = list_documents()
+
+    return {
+        "total_documents": len(documents),
+        "documents": documents
+    }
+
+
+# Delete an uploaded document
+@app.delete("/documents/{filename}")
+def remove_document(filename: str):
+
+    deleted_count = delete_document(filename)
+
+    if deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found"
+        )
+
+    return {
+        "message": "Document deleted successfully",
+        "filename": filename,
+        "deleted_chunks": deleted_count
+    }
+
